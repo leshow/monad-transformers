@@ -1,6 +1,8 @@
 module Main where
 
-import Lib
+import           Lib
 
 main :: IO ()
-main = runStuff
+main = do
+    cli <- parseCLI
+    runProgram cli
