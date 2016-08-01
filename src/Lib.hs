@@ -42,10 +42,19 @@ parseCLI = execParser (withInfo parseOptions "File Fun")
 
 parseOptions :: Parser Options
 parseOptions = Options
-    <$> (switch $ long "capitalize")
-    <*> (switch $ long "excited")
-    <*> (switch $ long "stdin")
-    <*> (optional $ strOption $ long "file")
+    <$> switch
+        (long "capitalize"
+        <> help "Capitalize the src file")
+    <*> switch
+        (long "excited"
+        <> help "Make the file real excited")
+    <*> switch
+        (long "stdin"
+        <> help "redir from stdin")
+    <*> optional
+        (strOption $
+            long "file"
+            <> help "File to parse")
 
 -- safer reading of files
 
@@ -54,8 +63,11 @@ safeReadFile = E.try . readFile
 
 -- main
 runProgram :: Options -> IO ()
-runProgram o =
-    putStr =<< (handleExcitedness o . handleCapitalization o <$> getSource o)
+runProgram o = do
+    str <- handleExcitedness o . handleCapitalization o <$> getSource o
+    putStr str
 
 runStuff :: IO ()
-runStuff = runProgram =<< parseCLI
+runStuff = do
+    x <- parseCLI
+    runProgram x
