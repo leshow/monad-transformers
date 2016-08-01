@@ -46,13 +46,6 @@ handleCapitalization s = fmap (B.bool s (map C.toUpper s)) (asks oCapitalize)
 handleExcitedness :: AppConfig m => String -> m String
 handleExcitedness str = fmap (B.bool str ("ZOMG " ++ str)) (asks oExcited)
 
--- loadContents :: Options -> IO (Either String String)
--- loadContents o = maybe defaultResponse readFileFromOptions $ oFileToRead o
---     where
---         readFileFromOptions f = BF.first show <$> safeReadFile f
---         defaultResponse = return $ Right "This is fun!"
-
-
 -- The maybe function takes a default value, a function, and a Maybe value.
 -- If the Maybe value is Nothing, the function returns the default value.
 -- Otherwise, it applies the function to the value inside the Just and returns the result.
