@@ -1,44 +1,56 @@
-{-# LANGUAGE ConstraintKinds            #-}
-{-# LANGUAGE FlexibleContexts           #-}
+{-# LANGUAGE ConstraintKinds #-}
+{-# LANGUAGE FlexibleContexts #-}
 {-# LANGUAGE GeneralizedNewtypeDeriving #-}
+{-# LANGUAGE MultiParamTypeClasses #-}
 
 module Lib
-    ( runProgram,
-    parseCLI
-    ) where
+  ( runProgram
+  , parseCLI
+  ) where
 
-import qualified Control.Exception    as E
-import           Control.Monad.Except
-import           Control.Monad.Reader
-import qualified Data.Bifunctor       as BF
-import qualified Data.Bool            as B
-import qualified Data.Char            as C
-import           Options.Applicative
+import qualified Control.Exception as E
+import Control.Monad.Except
+import Control.Monad.Reader
+import qualified Data.Bifunctor as BF
+import qualified Data.Bool as B
+import qualified Data.Char as C
+import Data.Monoid ((<>))
+import Options.Applicative
 
-data AppError = IOError E.IOException
+data AppError =
+  IOError E.IOException
 
 type AppConfig = MonadReader Options
 
-newtype App a = App {
-    runApp :: ReaderT Options (ExceptT AppError IO) a
-} deriving (Monad, Functor, Applicative, AppConfig, MonadIO, MonadError AppError)
--- remember AppConfig here is MonadReader Options
+newtype App a = App
+  { runApp :: ReaderT Options (ExceptT AppError IO) a
+  } deriving ( Monad
+             , Functor
+             , Applicative
+             , AppConfig
+             , MonadIO
+             , MonadError AppError
+             )
 
+-- remember AppConfig here is MonadReader Options
 data Options = Options
-    { oCapitalize :: Bool
-    , oExcited    :: Bool
-    , oStdIn      :: Bool
-    , oFileToRead :: Maybe String
-    }
+  { oCapitalize :: Bool
+  , oExcited :: Bool
+  , oStdIn :: Bool
+  , oFileToRead :: Maybe String
+  }
 
 getSource :: App String
 getSource = do
-    isStdIn <- asks oStdIn
-    B.bool loadContents (liftIO getContents) isStdIn
+  isStdIn <- asks oStdIn
+  B.bool loadContents (liftIO getContents) isStdIn
 
 -- because we specify AppConfig m constraint, we have access to oCapitalize from Options
 handleCapitalization :: AppConfig m => String -> m String
-handleCapitalization s = fmap (B.bool s (map C.toUpper s)) (asks oCapitalize)
+handleCapitalization s = do
+  makeCaps <- asks oCapitalize
+  return (B.bool s (map C.toUpper s) makeCaps)
+    -- fmap (B.bool s (map C.toUpper s)) (asks oCapitalize)
 
 -- we need to use fmap because we are in a monad context, so we
 -- partially apply the first 2 arguments to B.bool (a -> a -> Bool -> a)
@@ -51,14 +63,15 @@ handleExcitedness str = fmap (B.bool str ("ZOMG " ++ str)) (asks oExcited)
 -- Otherwise, it applies the function to the value inside the Just and returns the result.
 loadContents :: App String
 loadContents = do
-    file <- asks oFileToRead
-    maybe defaultResponse readFileFromOptions file
-        where
-            readFileFromOptions :: (AppConfig m, MonadIO m, MonadError AppError m) => FilePath -> m String
-            readFileFromOptions f = do
-                res <- fmap (BF.first IOError) (liftIO (safeReadFile f))
-                either throwError return res
-            defaultResponse = return "This is fun!"
+  file <- asks oFileToRead
+  maybe defaultResponse readFileFromOptions file
+  where
+    readFileFromOptions ::
+         (AppConfig m, MonadIO m, MonadError AppError m) => FilePath -> m String
+    readFileFromOptions f = do
+      res <- fmap (BF.first IOError) (liftIO (safeReadFile f))
+      either throwError return res
+    defaultResponse = return "This is fun!"
 
 -- cli parsing
 parseCLI :: IO Options
@@ -67,23 +80,13 @@ parseCLI = execParser (withInfo parseOptions "File Fun")
     withInfo opts h = info (helper <*> opts) $ header h
 
 parseOptions :: Parser Options
-parseOptions = Options
-    <$> switch
-        (long "capitalize"
-        <> help "Capitalize the src file")
-    <*> switch
-        (long "excited"
-        <> help "Make the file real excited")
-    <*> switch
-        (long "stdin"
-        <> help "redir from stdin")
-    <*> optional
-        (strOption $
-            long "file"
-            <> help "File to parse")
+parseOptions =
+  Options <$> switch (long "capitalize" <> help "Capitalize the src file") <*>
+  switch (long "excited" <> help "Make the file real excited") <*>
+  switch (long "stdin" <> help "redir from stdin") <*>
+  optional (strOption $ long "file" <> help "File to parse")
 
 -- safer reading of files
-
 safeReadFile :: FilePath -> IO (Either E.IOException String)
 safeReadFile = E.try . readFile
 
@@ -102,16 +105,14 @@ The left-hand side (either renderError return) handles the success case by retur
 -}
 runProgram :: Options -> IO ()
 runProgram o = do
-    x <- runExceptT (runReaderT (runApp run) o) ---runExceptT and runReaderT access the wrapped representation of our newtype App
-    either renderError return x
+  x <- runExceptT (runReaderT (runApp run) o) ---runExceptT and runReaderT access the wrapped representation of our newtype App
+  either renderError return x
 
 run :: App ()
-run = liftIO . putStr
-    =<< handleExcitedness
-    =<< handleCapitalization
-    =<< getSource
+run =
+  liftIO . putStr =<< handleExcitedness =<< handleCapitalization =<< getSource
 
 renderError :: AppError -> IO ()
 renderError (IOError e) = do
-    putStrLn "There was an error"
-    putStrLn (" " ++ show e)
+  putStrLn "There was an error"
+  putStrLn (" " ++ show e)
